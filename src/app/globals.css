@@ -144,6 +144,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .tracker-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; }
 .tracker-table th, .tracker-table td { width: 39px; min-width: 39px; height: 48px; padding: 0; border-right: 1px solid rgba(110,130,134,.16); border-bottom: 1px solid rgba(110,130,134,.17); text-align: center; white-space: nowrap; }
 .tracker-table th { position: sticky; top: 0; z-index: 5; color: #526369; background: rgba(236, 242, 243, .96); font-size: 12px; font-weight: 850; }
+.tracker-table th.today-column { color: var(--brand-dark); background: #d8ece8; box-shadow: inset 2px 0 rgba(20,125,114,.5), inset -2px 0 rgba(20,125,114,.5), inset 0 3px var(--brand); }
 .tracker-table .sticky-name { position: sticky; left: 0; z-index: 7; width: 218px; min-width: 218px; padding: 0 14px; background: rgba(255,255,255,.96); text-align: left; }
 .tracker-table th.sticky-name { z-index: 9; background: rgba(236,242,243,.98); }
 .tracker-table .sticky-goal, .tracker-table .sticky-achieved { position: sticky; z-index: 7; width: 86px; min-width: 86px; background: rgba(255,255,255,.98); font-weight: 800; }
@@ -161,6 +162,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .day-cell button:not(:disabled):hover { background: rgba(255,255,255,.28); }
 .day-cell span { font-size: 21px; font-weight: 900; opacity: 0; transform: scale(.55); transition: opacity 120ms ease, transform 170ms cubic-bezier(.2,.8,.2,1.2); }
 .day-cell.checked { background: var(--habit-color); }
+.tracker-table td.day-cell.today-column { box-shadow: inset 2px 0 rgba(20,125,114,.48), inset -2px 0 rgba(20,125,114,.48); }
+.tracker-table td.day-cell.today-column:not(.checked) { background: color-mix(in srgb, var(--habit-color) 32%, #e6f4f1); }
 .day-cell.checked span { opacity: 1; transform: scale(1); }
 .sticky-achieved.complete { background: #21c98c; }
 .sticky-achieved.partial { background: #f6dd55; }

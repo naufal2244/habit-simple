@@ -32,6 +32,7 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
   const [isPending, startTransition] = useTransition();
   const dayCount = new Date(year, month + 1, 0).getDate();
   const visibleDays = readOnly ? Math.min(cutoff, dayCount) : dayCount;
+  const todayDay = year === now.getFullYear() && month === now.getMonth() && now.getDate() <= visibleDays ? now.getDate() : null;
   const datePrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
   const dataKey = `/api/habits?year=${year}&month=${month}`;
   const { data, error, isLoading, mutate } = useSWR<TrackerData>(dataKey, fetcher, {
@@ -110,9 +111,9 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
       optimisticData: (current) => applyToggle(current ?? emptyData),
       rollbackOnError: true,
     }).catch(() => undefined);
-  }, [datePrefix, mutate, readOnly]);
+  }, [datePrefix, mutate, readOnly, setActionError]);
 
-  const openEditor = useCallback((habit: Habit) => setEditor(habit), []);
+  const openEditor = useCallback((habit: Habit) => setEditor(habit), [setEditor]);
 
   async function saveHabit(input: HabitInput) {
     const editing = editor ?? null;
@@ -199,7 +200,7 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
           <div><span>Daily grid</span><h2>{readOnly ? "Rekap checklist" : "Checklist habit"}</h2></div>
           {!readOnly && <button className="primary-control" type="button" onClick={() => setEditor(null)}><Plus size={18} />New Habit</button>}
         </header>
-        <HabitTable habits={habits} visibleDays={visibleDays} completionKeys={completionKeys} readOnly={readOnly} loading={isLoading} onToggle={toggle} onEdit={openEditor} />
+        <HabitTable habits={habits} visibleDays={visibleDays} todayDay={todayDay} completionKeys={completionKeys} readOnly={readOnly} loading={isLoading} onToggle={toggle} onEdit={openEditor} />
       </section>
 
       <TrackerInsights consistent={stats.consistent} streak={stats.streak} streakWinners={stats.streakWinners} />

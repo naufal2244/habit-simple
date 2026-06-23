@@ -7,6 +7,7 @@ import type { Habit } from "@/lib/habit-types";
 type HabitRowProps = {
   habit: Habit;
   visibleDays: number;
+  todayDay: number | null;
   completionKey: string;
   readOnly: boolean;
   onToggle: (habitId: string, day: number) => void;
@@ -16,6 +17,7 @@ type HabitRowProps = {
 export const HabitRow = memo(function HabitRow({
   habit,
   visibleDays,
+  todayDay,
   completionKey,
   readOnly,
   onToggle,
@@ -43,7 +45,7 @@ export const HabitRow = memo(function HabitRow({
         const day = index + 1;
         const checked = completedDays.has(day);
         return (
-          <td className={`day-cell${checked ? " checked" : ""}`} key={day}>
+          <td className={`day-cell${checked ? " checked" : ""}${day === todayDay ? " today-column" : ""}`} key={day}>
             <button
               type="button"
               disabled={readOnly}
