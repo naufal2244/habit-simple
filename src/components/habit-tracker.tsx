@@ -1,21 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import useSWR from "swr";
+import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ListChecks, Plus, Target } from "lucide-react";
+import type { Habit, HabitInput, TrackerData } from "@/lib/habit-types";
+import { HabitTable } from "./habit-table";
+import { TrackerInsights } from "./tracker-insights";
 
-type Habit = { id: string; name: string; goal: number; color: string };
-type Completion = { habitId: string; completedOn: string };
+const HabitModal = dynamic(() => import("./habit-modal").then((module) => module.HabitModal), { ssr: false });
 
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-const colors = ["#97E3B8", "#F9B4C4", "#9BD3F5", "#FFE58A", "#BDA7F2", "#FFB482", "#7DE1D6", "#C6E887"];
+const emptyData: TrackerData = { habits: [], completions: [] };
 
-async function fetchHabitData(year: number, month: number) {
-  const response = await fetch(`/api/habits?year=${year}&month=${month}`, { cache: "no-store" });
+async function fetcher(url: string): Promise<TrackerData> {
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new Error("Data habit gagal dimuat");
-  return response.json() as Promise<{ habits: Habit[]; completions: Completion[] }>;
+  return response.json();
 }
 
 export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
@@ -23,76 +27,44 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [cutoff, setCutoff] = useState(now.getDate());
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [completions, setCompletions] = useState<Completion[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", goal: 20, color: colors[0] });
+  const [editor, setEditor] = useState<Habit | null | undefined>(undefined);
+  const [actionError, setActionError] = useState("");
+  const [isPending, startTransition] = useTransition();
   const dayCount = new Date(year, month + 1, 0).getDate();
   const visibleDays = readOnly ? Math.min(cutoff, dayCount) : dayCount;
+  const datePrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const dataKey = `/api/habits?year=${year}&month=${month}`;
+  const { data, error, isLoading, mutate } = useSWR<TrackerData>(dataKey, fetcher, {
+    keepPreviousData: true,
+    revalidateOnFocus: false,
+    dedupingInterval: 15_000,
+  });
+  const habits = data?.habits ?? emptyData.habits;
+  const completions = data?.completions ?? emptyData.completions;
 
-  async function loadData() {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await fetchHabitData(year, month);
-      setHabits(data.habits);
-      setCompletions(data.completions);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Terjadi kesalahan");
-    } finally {
-      setLoading(false);
+  const completionKeys = useMemo(() => {
+    const daysByHabit = new Map<string, number[]>();
+    for (const completion of completions) {
+      const day = Number(completion.completedOn.slice(-2));
+      if (day > visibleDays) continue;
+      const days = daysByHabit.get(completion.habitId) ?? [];
+      days.push(day);
+      daysByHabit.set(completion.habitId, days);
     }
-  }
+    return new Map([...daysByHabit].map(([habitId, days]) => [habitId, days.sort((a, b) => a - b).join(",")]));
+  }, [completions, visibleDays]);
 
-  useEffect(() => {
-    let active = true;
-    fetchHabitData(year, month)
-      .then((data) => {
-        if (!active) return;
-        setHabits(data.habits);
-        setCompletions(data.completions);
-        setError("");
-      })
-      .catch((loadError) => {
-        if (active) setError(loadError instanceof Error ? loadError.message : "Terjadi kesalahan");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
-  }, [month, year]);
-
-  const completionSet = useMemo(
-    () => new Set(completions.map((item) => `${item.habitId}:${item.completedOn}`)),
-    [completions],
-  );
-
-  function dateForDay(day: number) {
-    return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  }
-
-  function achieved(habitId: string) {
-    let total = 0;
-    for (let day = 1; day <= visibleDays; day += 1) {
-      if (completionSet.has(`${habitId}:${dateForDay(day)}`)) total += 1;
-    }
-    return total;
-  }
-
-  function longestStreak(habitId: string) {
-    let current = 0;
-    let longest = 0;
-    for (let day = 1; day <= visibleDays; day += 1) {
-      current = completionSet.has(`${habitId}:${dateForDay(day)}`) ? current + 1 : 0;
-      longest = Math.max(longest, current);
-    }
-    return longest;
-  }
-
-  const stats = (() => {
-    const values = habits.map((habit) => ({ habit, achieved: achieved(habit.id), streak: longestStreak(habit.id) }));
+  const stats = useMemo(() => {
+    const values = habits.map((habit) => {
+      const completed = new Set((completionKeys.get(habit.id) ?? "").split(",").filter(Boolean).map(Number));
+      let current = 0;
+      let streak = 0;
+      for (let day = 1; day <= visibleDays; day += 1) {
+        current = completed.has(day) ? current + 1 : 0;
+        streak = Math.max(streak, current);
+      }
+      return { habit, achieved: completed.size, streak };
+    });
     const total = values.reduce((sum, item) => sum + item.achieved, 0);
     const goals = habits.reduce((sum, habit) => sum + habit.goal, 0);
     const bestScore = values.length ? Math.max(...values.map((item) => item.achieved / item.habit.goal)) : 0;
@@ -104,117 +76,118 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
       streak: bestStreak,
       streakWinners: values.filter((item) => item.streak === bestStreak && bestStreak > 0),
     };
-  })();
+  }, [completionKeys, habits, visibleDays]);
 
-  async function toggle(habitId: string, day: number) {
+  const toggle = useCallback((habitId: string, day: number) => {
     if (readOnly) return;
-    const completedOn = dateForDay(day);
-    const key = `${habitId}:${completedOn}`;
-    const wasCompleted = completionSet.has(key);
-    setCompletions((current) => wasCompleted
-      ? current.filter((item) => `${item.habitId}:${item.completedOn}` !== key)
-      : [...current, { habitId, completedOn }]);
-    const response = await fetch("/api/completions/toggle", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ habitId, completedOn }),
-    });
-    if (!response.ok) void loadData();
-  }
+    const completedOn = `${datePrefix}-${String(day).padStart(2, "0")}`;
+    setActionError("");
+    const applyToggle = (current: TrackerData) => {
+      const exists = current.completions.some((item) => item.habitId === habitId && item.completedOn === completedOn);
+      return {
+        ...current,
+        completions: exists
+          ? current.completions.filter((item) => item.habitId !== habitId || item.completedOn !== completedOn)
+          : [...current.completions, { habitId, completedOn }],
+      };
+    };
+    void mutate(async (current) => {
+      const optimistic = applyToggle(current ?? emptyData);
+      try {
+        const response = await fetch("/api/completions/toggle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ habitId, completedOn }),
+        });
+        if (!response.ok) throw new Error();
+        return optimistic;
+      } catch {
+        setActionError("Checklist gagal disimpan. Coba lagi.");
+        throw new Error("Completion save failed");
+      }
+    }, {
+      revalidate: false,
+      optimisticData: (current) => applyToggle(current ?? emptyData),
+      rollbackOnError: true,
+    }).catch(() => undefined);
+  }, [datePrefix, mutate, readOnly]);
 
-  async function addHabit(event: React.FormEvent) {
-    event.preventDefault();
-    const response = await fetch("/api/habits", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!response.ok) return setError("Habit gagal ditambahkan");
-    setModalOpen(false);
-    setForm({ name: "", goal: 20, color: colors[0] });
-    await loadData();
-  }
+  const openEditor = useCallback((habit: Habit) => setEditor(habit), []);
 
-  async function changeGoal(habitId: string, goal: number) {
-    setHabits((current) => current.map((habit) => habit.id === habitId ? { ...habit, goal } : habit));
-    await fetch(`/api/habits/${habitId}`, {
-      method: "PATCH",
+  async function saveHabit(input: HabitInput) {
+    const editing = editor ?? null;
+    const response = await fetch(editing ? `/api/habits/${editing.id}` : "/api/habits", {
+      method: editing ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ goal }),
+      body: JSON.stringify(input),
     });
+    if (!response.ok) {
+      setActionError(editing ? "Perubahan habit gagal disimpan." : "Habit gagal ditambahkan.");
+      throw new Error("Habit save failed");
+    }
+    const saved = await response.json() as Habit;
+    await mutate((current) => {
+      const source = current ?? emptyData;
+      return {
+        ...source,
+        habits: editing ? source.habits.map((habit) => habit.id === saved.id ? saved : habit) : [...source.habits, saved],
+      };
+    }, { revalidate: false });
+    setEditor(undefined);
+    setActionError("");
   }
 
   function moveMonth(offset: number) {
     const next = new Date(year, month + offset, 1);
-    setYear(next.getFullYear());
-    setMonth(next.getMonth());
+    startTransition(() => {
+      setYear(next.getFullYear());
+      setMonth(next.getMonth());
+    });
   }
 
   return (
-    <main className="tracker-main">
-      <section className="tracker-toolbar">
-        <div>
-          <p>{readOnly ? "Rekap sampai tanggal" : "Periode aktif"}</p>
+    <main className={`tracker-main${isPending ? " is-pending" : ""}`}>
+      <section className="workspace-header glass-panel enter-up">
+        <div className="period-heading">
+          <span>{readOnly ? "Rekap sampai tanggal" : "Periode aktif"}</span>
           <h1>{monthNames[month]} {year}</h1>
+          <p>{readOnly ? "Tinjau pencapaian pada periode pilihan." : "Jaga ritme kecil yang membentuk progres besar."}</p>
         </div>
         {readOnly ? (
           <div className="date-filters">
-            <label>Tahun<input type="number" min="2021" max="2100" value={year} onChange={(event) => setYear(Number(event.target.value))} /></label>
-            <label>Bulan<select value={month} onChange={(event) => setMonth(Number(event.target.value))}>{monthNames.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></label>
+            <label>Tahun<input type="number" min="2021" max="2100" value={year} onChange={(event) => startTransition(() => setYear(Number(event.target.value)))} /></label>
+            <label>Bulan<select value={month} onChange={(event) => startTransition(() => setMonth(Number(event.target.value)))}>{monthNames.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></label>
             <label>Tanggal<select value={visibleDays} onChange={(event) => setCutoff(Number(event.target.value))}>{Array.from({ length: dayCount }, (_, index) => <option key={index + 1}>{index + 1}</option>)}</select></label>
           </div>
         ) : (
-          <div className="month-navigation">
-            <button type="button" onClick={() => moveMonth(-1)} aria-label="Bulan sebelumnya"><ChevronLeft /></button>
-            <button type="button" onClick={() => moveMonth(1)} aria-label="Bulan berikutnya"><ChevronRight /></button>
+          <div className="month-navigation" aria-label="Pilih bulan">
+            <button className="icon-control" type="button" onClick={() => moveMonth(-1)} aria-label="Bulan sebelumnya" title="Bulan sebelumnya"><ChevronLeft /></button>
+            <span><CalendarDays size={17} />{monthNames[month].slice(0, 3)} {year}</span>
+            <button className="icon-control" type="button" onClick={() => moveMonth(1)} aria-label="Bulan berikutnya" title="Bulan berikutnya"><ChevronRight /></button>
           </div>
         )}
       </section>
 
-      {error && <p className="error-banner">{error}</p>}
-      <section className="tracker-card">
-        <div className="tracker-scroll">
-          <table className="tracker-table">
-            <thead><tr><th className="sticky-name">Habit Name</th>{Array.from({ length: visibleDays }, (_, index) => <th key={index + 1}>{index + 1}</th>)}<th className="sticky-goal">Goal</th><th className="sticky-achieved">Achieved</th></tr></thead>
-            <tbody>
-              {habits.map((habit) => {
-                const done = achieved(habit.id);
-                return <tr key={habit.id} style={{ "--habit-color": habit.color } as React.CSSProperties}>
-                  <td className="sticky-name">{habit.name}</td>
-                  {Array.from({ length: visibleDays }, (_, index) => {
-                    const day = index + 1;
-                    const checked = completionSet.has(`${habit.id}:${dateForDay(day)}`);
-                    return <td className={`day-cell${checked ? " checked" : ""}`} key={day}>
-                      <button type="button" disabled={readOnly} onClick={() => void toggle(habit.id, day)} aria-label={`${habit.name}, tanggal ${day}`}><span>✓</span></button>
-                    </td>;
-                  })}
-                  <td className="sticky-goal">{readOnly ? habit.goal : <input aria-label={`Goal ${habit.name}`} type="number" min="1" max="31" value={habit.goal} onChange={(event) => void changeGoal(habit.id, Number(event.target.value))} />}</td>
-                  <td className={`sticky-achieved ${done >= habit.goal ? "complete" : done >= Math.ceil(habit.goal * .55) ? "partial" : "low"}`}>{done}</td>
-                </tr>;
-              })}
-            </tbody>
-          </table>
-          {!loading && !habits.length && <div className="empty-state">Belum ada habit untuk akun ini.</div>}
-        </div>
-        {!readOnly && <div className="tracker-footer"><button type="button" onClick={() => setModalOpen(true)}><Plus size={19} />New Habit</button></div>}
+      <section className="metric-strip glass-panel enter-up" aria-label="Ringkasan periode">
+        <div><span><Target size={17} />Completion</span><strong>{stats.rate}%</strong></div>
+        <div><span><CheckCheck size={17} />Checklist</span><strong>{stats.total}</strong></div>
+        <div><span><ListChecks size={17} />Habit aktif</span><strong>{habits.length}</strong></div>
+        <div><span>Rentang</span><strong>{visibleDays} <small>hari</small></strong></div>
       </section>
 
-      <section className="tracker-stats">
-        <article><p>Monthly Completion</p><strong>{stats.rate}%</strong></article>
-        <article><p>Most Consistent</p><ul>{stats.consistent.length ? stats.consistent.map((item) => <li key={item.habit.id}>{item.habit.name} — {item.achieved}/{item.habit.goal}</li>) : <li>-</li>}</ul></article>
-        <article><p>Longest Streak</p><strong>{stats.streak} <small>Days</small></strong><ul>{stats.streakWinners.map((item) => <li key={item.habit.id}>{item.habit.name}</li>)}</ul></article>
-        <article><p>Total Checklist</p><strong>{stats.total}</strong></article>
+      {(error || actionError) && <p className="error-banner" role="alert">{actionError || error?.message}</p>}
+
+      <section className="tracker-workbench glass-panel enter-up">
+        <header className="workbench-header">
+          <div><span>Daily grid</span><h2>{readOnly ? "Rekap checklist" : "Checklist habit"}</h2></div>
+          {!readOnly && <button className="primary-control" type="button" onClick={() => setEditor(null)}><Plus size={18} />New Habit</button>}
+        </header>
+        <HabitTable habits={habits} visibleDays={visibleDays} completionKeys={completionKeys} readOnly={readOnly} loading={isLoading} onToggle={toggle} onEdit={openEditor} />
       </section>
 
-      {modalOpen && <div className="tracker-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalOpen(false)}>
-        <form className="tracker-modal" onSubmit={addHabit}>
-          <div className="modal-title"><div><p>Tambah Data</p><h2>Habit Baru</h2></div><button type="button" onClick={() => setModalOpen(false)} aria-label="Tutup"><X /></button></div>
-          <label>Nama habit<input autoFocus required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Contoh: Morning Walk" /></label>
-          <label>Goal bulanan<input required type="number" min="1" max="31" value={form.goal} onChange={(event) => setForm({ ...form, goal: Number(event.target.value) })} /></label>
-          <fieldset><legend>Warna baris</legend><div className="color-options">{colors.map((color) => <button className={form.color === color ? "selected" : ""} key={color} type="button" style={{ background: color }} onClick={() => setForm({ ...form, color })} aria-label={`Pilih warna ${color}`} />)}</div></fieldset>
-          <div className="modal-actions"><button type="button" onClick={() => setModalOpen(false)}>Batal</button><button className="save" type="submit">Simpan Habit</button></div>
-        </form>
-      </div>}
+      <TrackerInsights consistent={stats.consistent} streak={stats.streak} streakWinners={stats.streakWinners} />
+
+      {editor !== undefined && <HabitModal key={editor?.id ?? "new"} habit={editor} onClose={() => setEditor(undefined)} onSubmit={saveHabit} />}
     </main>
   );
 }

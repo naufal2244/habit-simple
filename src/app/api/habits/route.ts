@@ -35,7 +35,10 @@ export async function GET(request: Request) {
       ),
   ]);
 
-  return NextResponse.json({ habits: habitRows, completions: completionRows });
+  return NextResponse.json(
+    { habits: habitRows, completions: completionRows },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }
 
 export async function POST(request: Request) {

@@ -4,7 +4,7 @@ import { AuthActions } from "./auth-actions";
 
 export function AppHeader({ active }: { active: "tracker" | "recap" }) {
   return (
-    <header className="dashboard-header app-nav-header">
+    <header className="dashboard-header app-nav-header glass-nav">
       <Link className="brand" href="/dashboard">
         <CalendarCheck aria-hidden="true" size={21} />
         HabitTracker
