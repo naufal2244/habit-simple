@@ -28,10 +28,12 @@ function ConfiguredAuthActions({ compact }: { compact: boolean }) {
     <div className={`auth-actions${compact ? " compact" : ""}`}>
       {userId ? (
         <>
-          <Link className="primary-action" href="/dashboard">
-            Dashboard
-            <ArrowRight aria-hidden="true" size={18} />
-          </Link>
+          {!compact && (
+            <Link className="primary-action" href="/dashboard">
+              Dashboard
+              <ArrowRight aria-hidden="true" size={18} />
+            </Link>
+          )}
           <UserButton />
         </>
       ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, X } from "lucide-react";
+import { LoaderCircle, Trash2, X } from "lucide-react";
 import type { Habit, HabitInput } from "@/lib/habit-types";
 
 const colors = ["#79d9a9", "#f2a9bb", "#77bfe8", "#f4cf68", "#a999e8", "#f3a170", "#68cfc8", "#afd86d"];
@@ -10,15 +10,18 @@ type HabitModalProps = {
   habit: Habit | null;
   onClose: () => void;
   onSubmit: (input: HabitInput) => Promise<void>;
+  onDelete: (habit: Habit) => Promise<void>;
 };
 
-export function HabitModal({ habit, onClose, onSubmit }: HabitModalProps) {
+export function HabitModal({ habit, onClose, onSubmit, onDelete }: HabitModalProps) {
   const [form, setForm] = useState<HabitInput>({
     name: habit?.name ?? "",
     goal: habit?.goal ?? 20,
     color: habit?.color ?? colors[0],
   });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -37,6 +40,16 @@ export function HabitModal({ habit, onClose, onSubmit }: HabitModalProps) {
       await onSubmit(form);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function removeHabit() {
+    if (!habit) return;
+    setDeleting(true);
+    try {
+      await onDelete(habit);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -81,9 +94,30 @@ export function HabitModal({ habit, onClose, onSubmit }: HabitModalProps) {
           </div>
         </fieldset>
 
+        {habit && (
+          <section className={`delete-habit-section${confirmingDelete ? " is-confirming" : ""}`} aria-label="Hapus habit">
+            {confirmingDelete ? (
+              <>
+                <p>Hapus <strong>{habit.name}</strong> beserta seluruh checklist-nya?</p>
+                <div>
+                  <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Batal</button>
+                  <button className="danger-control" type="button" onClick={() => void removeHabit()} disabled={deleting}>
+                    {deleting && <LoaderCircle className="spin" size={17} />}
+                    Ya, hapus
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button className="delete-trigger" type="button" onClick={() => setConfirmingDelete(true)} disabled={saving}>
+                <Trash2 size={17} />Hapus habit
+              </button>
+            )}
+          </section>
+        )}
+
         <footer className="habit-dialog-actions">
-          <button type="button" onClick={onClose}>Batal</button>
-          <button className="primary-control" type="submit" disabled={saving || !form.name.trim()}>
+          <button type="button" onClick={onClose} disabled={saving || deleting}>Batal</button>
+          <button className="primary-control" type="submit" disabled={saving || deleting || !form.name.trim()}>
             {saving && <LoaderCircle className="spin" size={17} />}
             {habit ? "Simpan perubahan" : "Tambah habit"}
           </button>

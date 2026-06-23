@@ -22,3 +22,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!updated) return NextResponse.json({ error: "Habit tidak ditemukan" }, { status: 404 });
   return NextResponse.json(updated);
 }
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+  const [deleted] = await getDb()
+    .delete(habits)
+    .where(and(eq(habits.id, id), eq(habits.userId, userId)))
+    .returning({ id: habits.id });
+  if (!deleted) return NextResponse.json({ error: "Habit tidak ditemukan" }, { status: 404 });
+  return NextResponse.json(deleted);
+}

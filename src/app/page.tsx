@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, CalendarCheck, ShieldCheck } from "lucide-react";
+import { CalendarCheck, ShieldCheck } from "lucide-react";
 import { AuthActions } from "@/components/auth-actions";
 import { isClerkConfigured } from "@/lib/env";
 
@@ -35,10 +35,6 @@ export default function Home() {
           </p>
           <div className="hero-actions">
             <AuthActions enabled={authEnabled} />
-            <Link className="secondary-link" href="/dashboard">
-              Lihat dashboard
-              <ArrowRight aria-hidden="true" size={18} />
-            </Link>
           </div>
         </div>
       </section>

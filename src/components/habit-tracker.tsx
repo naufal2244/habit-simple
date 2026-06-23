@@ -137,6 +137,23 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
     setActionError("");
   }
 
+  async function deleteHabit(habit: Habit) {
+    const response = await fetch(`/api/habits/${habit.id}`, { method: "DELETE" });
+    if (!response.ok) {
+      setActionError("Habit gagal dihapus.");
+      throw new Error("Habit delete failed");
+    }
+    await mutate((current) => {
+      const source = current ?? emptyData;
+      return {
+        habits: source.habits.filter((item) => item.id !== habit.id),
+        completions: source.completions.filter((item) => item.habitId !== habit.id),
+      };
+    }, { revalidate: false });
+    setEditor(undefined);
+    setActionError("");
+  }
+
   function moveMonth(offset: number) {
     const next = new Date(year, month + offset, 1);
     startTransition(() => {
@@ -187,7 +204,7 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
 
       <TrackerInsights consistent={stats.consistent} streak={stats.streak} streakWinners={stats.streakWinners} />
 
-      {editor !== undefined && <HabitModal key={editor?.id ?? "new"} habit={editor} onClose={() => setEditor(undefined)} onSubmit={saveHabit} />}
+      {editor !== undefined && <HabitModal key={editor?.id ?? "new"} habit={editor} onClose={() => setEditor(undefined)} onSubmit={saveHabit} onDelete={deleteHabit} />}
     </main>
   );
 }
