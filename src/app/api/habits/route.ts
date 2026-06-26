@@ -24,7 +24,12 @@ export async function GET(request: Request) {
   const [habitRows, completionRows] = await Promise.all([
     db.select().from(habits).where(eq(habits.userId, userId)).orderBy(asc(habits.createdAt)),
     db
-      .select({ habitId: habitCompletions.habitId, completedOn: habitCompletions.completedOn })
+      .select({
+        habitId: habitCompletions.habitId,
+        completedOn: habitCompletions.completedOn,
+        completed: habitCompletions.completed,
+        note: habitCompletions.note,
+      })
       .from(habitCompletions)
       .where(
         and(

@@ -4,17 +4,23 @@ import dynamic from "next/dynamic";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import useSWR from "swr";
 import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ListChecks, Plus, Target } from "lucide-react";
-import type { Habit, HabitInput, TrackerData } from "@/lib/habit-types";
+import type { Completion, Habit, HabitInput, TrackerData } from "@/lib/habit-types";
 import { HabitTable } from "./habit-table";
 import { TrackerInsights } from "./tracker-insights";
 
 const HabitModal = dynamic(() => import("./habit-modal").then((module) => module.HabitModal), { ssr: false });
+const CompletionNoteModal = dynamic(() => import("./completion-note-modal").then((module) => module.CompletionNoteModal), { ssr: false });
 
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 const emptyData: TrackerData = { habits: [], completions: [] };
+
+type NoteEditor = {
+  habit: Habit;
+  day: number;
+};
 
 async function fetcher(url: string): Promise<TrackerData> {
   const response = await fetch(url, { cache: "no-store" });
@@ -28,6 +34,7 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
   const [month, setMonth] = useState(now.getMonth());
   const [cutoff, setCutoff] = useState(now.getDate());
   const [editor, setEditor] = useState<Habit | null | undefined>(undefined);
+  const [noteEditor, setNoteEditor] = useState<NoteEditor | null>(null);
   const [actionError, setActionError] = useState("");
   const [isPending, startTransition] = useTransition();
   const dayCount = new Date(year, month + 1, 0).getDate();
@@ -43,9 +50,20 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
   const habits = data?.habits ?? emptyData.habits;
   const completions = data?.completions ?? emptyData.completions;
 
+  const completionLookup = useMemo(() => {
+    const lookup = new Map<string, Completion>();
+    for (const completion of completions) {
+      const day = Number(completion.completedOn.slice(-2));
+      if (day > visibleDays) continue;
+      lookup.set(`${completion.habitId}:${day}`, completion);
+    }
+    return lookup;
+  }, [completions, visibleDays]);
+
   const completionKeys = useMemo(() => {
     const daysByHabit = new Map<string, number[]>();
     for (const completion of completions) {
+      if (!completion.completed) continue;
       const day = Number(completion.completedOn.slice(-2));
       if (day > visibleDays) continue;
       const days = daysByHabit.get(completion.habitId) ?? [];
@@ -84,12 +102,14 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
     const completedOn = `${datePrefix}-${String(day).padStart(2, "0")}`;
     setActionError("");
     const applyToggle = (current: TrackerData) => {
-      const exists = current.completions.some((item) => item.habitId === habitId && item.completedOn === completedOn);
+      const existing = current.completions.find((item) => item.habitId === habitId && item.completedOn === completedOn);
       return {
         ...current,
-        completions: exists
-          ? current.completions.filter((item) => item.habitId !== habitId || item.completedOn !== completedOn)
-          : [...current.completions, { habitId, completedOn }],
+        completions: existing
+          ? existing.completed && !existing.note.trim()
+            ? current.completions.filter((item) => item.habitId !== habitId || item.completedOn !== completedOn)
+            : current.completions.map((item) => item.habitId === habitId && item.completedOn === completedOn ? { ...item, completed: !item.completed } : item)
+          : [...current.completions, { habitId, completedOn, completed: true, note: "" }],
       };
     };
     void mutate(async (current) => {
@@ -114,6 +134,7 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
   }, [datePrefix, mutate, readOnly, setActionError]);
 
   const openEditor = useCallback((habit: Habit) => setEditor(habit), [setEditor]);
+  const openNoteEditor = useCallback((habit: Habit, day: number) => setNoteEditor({ habit, day }), [setNoteEditor]);
 
   async function saveHabit(input: HabitInput) {
     const editing = editor ?? null;
@@ -153,6 +174,48 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
     }, { revalidate: false });
     setEditor(undefined);
     setActionError("");
+  }
+
+  async function saveCompletionNote(habitId: string, day: number, note: string) {
+    const completedOn = `${datePrefix}-${String(day).padStart(2, "0")}`;
+    const nextNote = note.trim().slice(0, 500);
+    setActionError("");
+
+    const applyNote = (current: TrackerData) => {
+      const source = current ?? emptyData;
+      const existing = source.completions.find((item) => item.habitId === habitId && item.completedOn === completedOn);
+      if (!existing && !nextNote) return source;
+
+      return {
+        ...source,
+        completions: existing
+          ? !nextNote && !existing.completed
+            ? source.completions.filter((item) => item.habitId !== habitId || item.completedOn !== completedOn)
+            : source.completions.map((item) => item.habitId === habitId && item.completedOn === completedOn ? { ...item, note: nextNote } : item)
+          : [...source.completions, { habitId, completedOn, completed: false, note: nextNote }],
+      };
+    };
+
+    await mutate(async (current) => {
+      const optimistic = applyNote(current ?? emptyData);
+      try {
+        const response = await fetch("/api/completions/note", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ habitId, completedOn, note: nextNote }),
+        });
+        if (!response.ok) throw new Error();
+        return optimistic;
+      } catch {
+        setActionError("Catatan gagal disimpan. Coba lagi.");
+        throw new Error("Completion note save failed");
+      }
+    }, {
+      revalidate: false,
+      optimisticData: (current) => applyNote(current ?? emptyData),
+      rollbackOnError: true,
+    });
+    setNoteEditor(null);
   }
 
   function moveMonth(offset: number) {
@@ -200,12 +263,34 @@ export function HabitTracker({ readOnly = false }: { readOnly?: boolean }) {
           <div><span>Daily grid</span><h2>{readOnly ? "Rekap checklist" : "Checklist habit"}</h2></div>
           {!readOnly && <button className="primary-control" type="button" onClick={() => setEditor(null)}><Plus size={18} />New Habit</button>}
         </header>
-        <HabitTable habits={habits} visibleDays={visibleDays} todayDay={todayDay} completionKeys={completionKeys} readOnly={readOnly} loading={isLoading} onToggle={toggle} onEdit={openEditor} />
+        <HabitTable
+          habits={habits}
+          visibleDays={visibleDays}
+          todayDay={todayDay}
+          completionKeys={completionKeys}
+          completionLookup={completionLookup}
+          readOnly={readOnly}
+          loading={isLoading}
+          onToggle={toggle}
+          onEdit={openEditor}
+          onOpenNote={openNoteEditor}
+        />
       </section>
 
       <TrackerInsights consistent={stats.consistent} streak={stats.streak} streakWinners={stats.streakWinners} />
 
       {editor !== undefined && <HabitModal key={editor?.id ?? "new"} habit={editor} onClose={() => setEditor(undefined)} onSubmit={saveHabit} onDelete={deleteHabit} />}
+      {noteEditor && (
+        <CompletionNoteModal
+          habit={noteEditor.habit}
+          day={noteEditor.day}
+          dateLabel={`${monthNames[month]} ${noteEditor.day}, ${year}`}
+          initialNote={completionLookup.get(`${noteEditor.habit.id}:${noteEditor.day}`)?.note ?? ""}
+          readOnly={readOnly}
+          onClose={() => setNoteEditor(null)}
+          onSubmit={(note) => saveCompletionNote(noteEditor.habit.id, noteEditor.day, note)}
+        />
+      )}
     </main>
   );
 }

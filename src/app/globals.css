@@ -35,10 +35,10 @@ body {
   background-attachment: fixed;
   font-family: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
 }
-button, a, input, select { font: inherit; }
+button, a, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; }
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 3px solid rgba(20, 125, 114, 0.25);
   outline-offset: 2px;
 }
@@ -157,14 +157,42 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .edit-habit { display: grid; flex: 0 0 auto; width: 30px; height: 30px; margin-left: auto; padding: 0; color: var(--muted); background: transparent; border: 0; border-radius: 7px; opacity: 0; place-items: center; transition: opacity 150ms ease, transform 150ms ease, background-color 150ms ease; }
 .habit-name-cell:hover .edit-habit, .edit-habit:focus-visible { opacity: 1; }
 .edit-habit:hover { background: rgba(20,125,114,.1); transform: scale(1.04); }
-.day-cell { background: color-mix(in srgb, var(--habit-color) 24%, rgba(255,255,255,.76)); }
-.day-cell button { display: grid; width: 100%; height: 100%; padding: 0; background: transparent; border: 0; place-items: center; }
-.day-cell button:not(:disabled):hover { background: rgba(255,255,255,.28); }
-.day-cell span { font-size: 21px; font-weight: 900; opacity: 0; transform: scale(.55); transition: opacity 120ms ease, transform 170ms cubic-bezier(.2,.8,.2,1.2); }
+.day-cell { position: relative; background: color-mix(in srgb, var(--habit-color) 24%, rgba(255,255,255,.76)); }
+.day-toggle { display: grid; width: 100%; height: 100%; padding: 0; background: transparent; border: 0; place-items: center; }
+.day-toggle:not(:disabled):hover { background: rgba(255,255,255,.28); }
+.day-toggle span { font-size: 21px; font-weight: 900; opacity: 0; transform: scale(.55); transition: opacity 120ms ease, transform 170ms cubic-bezier(.2,.8,.2,1.2); }
 .day-cell.checked { background: var(--habit-color); }
 .tracker-table td.day-cell.today-column { box-shadow: inset 2px 0 rgba(20,125,114,.48), inset -2px 0 rgba(20,125,114,.48); }
 .tracker-table td.day-cell.today-column:not(.checked) { background: color-mix(in srgb, var(--habit-color) 32%, #e6f4f1); }
-.day-cell.checked span { opacity: 1; transform: scale(1); }
+.day-cell.checked .day-toggle span { opacity: 1; transform: scale(1); }
+.note-control {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: grid;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  color: #244148;
+  background: rgba(255,255,255,.82);
+  border: 1px solid rgba(255,255,255,.88);
+  border-radius: 5px;
+  opacity: 0;
+  place-items: center;
+  transform: translateY(2px);
+  transition: opacity 140ms ease, transform 140ms ease, background-color 140ms ease;
+}
+.day-cell:hover .note-control, .note-control:focus-visible, .day-cell.has-note .note-control {
+  opacity: 1;
+  transform: translateY(0);
+}
+.day-cell.has-note .note-control {
+  color: #fff;
+  background: var(--brand);
+  border-color: rgba(255,255,255,.72);
+}
+.note-control:hover { background: #fff; }
+.day-cell.has-note .note-control:hover { background: var(--brand-dark); }
 .sticky-achieved.complete { background: #21c98c; }
 .sticky-achieved.partial { background: #f6dd55; }
 .sticky-achieved.low { color: #fff; background: #e75b60; }
@@ -191,6 +219,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .habit-dialog { display: grid; gap: 19px; width: min(100%, 490px); padding: 22px; border-radius: 8px; animation: dialog-in 190ms cubic-bezier(.2,.8,.2,1) both; }
 .habit-dialog-header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 .habit-dialog-header h2 { margin: 4px 0 0; font-size: 23px; letter-spacing: 0; }
+.habit-dialog-header p { margin: 5px 0 0; color: var(--muted); font-size: 13px; font-weight: 700; }
 .habit-form-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(110px, .7fr); gap: 12px; }
 .color-fieldset { margin: 0; padding: 0; border: 0; }
 .color-options { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 8px; }
@@ -210,6 +239,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .habit-dialog-actions > button { min-height: 42px; padding: 0 15px; border-radius: 8px; font-weight: 800; }
 .habit-dialog-actions > button:not(.primary-control) { color: var(--foreground); background: rgba(255,255,255,.66); border: 1px solid var(--line); }
 .spin { animation: spin 800ms linear infinite; }
+.note-dialog { width: min(100%, 540px); }
+.note-field { display: grid; gap: 9px; }
+.note-field > span { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 850; text-transform: uppercase; }
+.note-field textarea {
+  display: block;
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  padding: 13px 14px;
+  color: var(--foreground);
+  background: rgba(255,255,255,.78);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  line-height: 1.55;
+}
+.note-field textarea:disabled { color: var(--foreground); background: rgba(255,255,255,.52); }
+.note-meta { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: -8px; color: var(--muted); font-size: 12px; }
+.note-meta strong { color: #405257; font-size: 12px; }
 
 .enter-up { animation: enter-up 260ms ease both; }
 .metric-strip.enter-up { animation-delay: 35ms; }
@@ -237,6 +284,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .tracker-table .sticky-goal, .tracker-table .sticky-achieved { position: static; width: 72px; min-width: 72px; }
   .tracker-table th.sticky-goal, .tracker-table th.sticky-achieved { position: sticky; }
   .edit-habit { opacity: 1; }
+  .note-control { opacity: .9; transform: none; }
 }
 
 @media (max-width: 620px) {

@@ -8,6 +8,8 @@ export type Habit = {
 export type Completion = {
   habitId: string;
   completedOn: string;
+  completed: boolean;
+  note: string;
 };
 
 export type TrackerData = {

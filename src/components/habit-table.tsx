@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Habit } from "@/lib/habit-types";
+import type { Completion, Habit } from "@/lib/habit-types";
 import { HabitRow } from "./habit-row";
 
 type HabitTableProps = {
@@ -9,13 +9,26 @@ type HabitTableProps = {
   visibleDays: number;
   todayDay: number | null;
   completionKeys: Map<string, string>;
+  completionLookup: Map<string, Completion>;
   readOnly: boolean;
   loading: boolean;
   onToggle: (habitId: string, day: number) => void;
   onEdit: (habit: Habit) => void;
+  onOpenNote: (habit: Habit, day: number) => void;
 };
 
-export function HabitTable({ habits, visibleDays, todayDay, completionKeys, readOnly, loading, onToggle, onEdit }: HabitTableProps) {
+export function HabitTable({
+  habits,
+  visibleDays,
+  todayDay,
+  completionKeys,
+  completionLookup,
+  readOnly,
+  loading,
+  onToggle,
+  onEdit,
+  onOpenNote,
+}: HabitTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastFocusedDay = useRef<number | null>(null);
 
@@ -60,9 +73,11 @@ export function HabitTable({ habits, visibleDays, todayDay, completionKeys, read
               visibleDays={visibleDays}
               todayDay={todayDay}
               completionKey={completionKeys.get(habit.id) ?? ""}
+              completionLookup={completionLookup}
               readOnly={readOnly}
               onToggle={onToggle}
               onEdit={onEdit}
+              onOpenNote={onOpenNote}
             />
           ))}
         </tbody>
